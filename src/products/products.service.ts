@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException, Query } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -102,15 +102,32 @@ export class ProductsService {
     if(!product) throw new NotFoundException();
     
     const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
     try{
-      await this.productRepository.save(product);
-      return product;
+
+      if(images){
+        await queryRunner.manager.delete(ProductImage, { product: {id} });
+        //delete * from ProductImage
+
+        product.images = images.map(image => this.productImageRepository.create({ url: image}));
+      }else{
+        // product.images = await this.productImageRepository.findBy({ product: {id} });
+      }
+
+      await queryRunner.manager.save(product);
+      await queryRunner.commitTransaction();
+      await queryRunner.release();
+      
+      // await this.productRepository.save(product);
+      return this.findOnePlain(id);
     }catch(error){
+      
+      await queryRunner.rollbackTransaction();
+      await queryRunner.release();
       this.handleExceptions(error);
     }
-
-    
   }
 
   async remove(id: string) {
@@ -124,6 +141,21 @@ export class ProductsService {
 
     this.logger.error(error);
     throw new InternalServerErrorException()
+
+  }
+
+  async deleteAllProduct(){
+    const query = this.productImageRepository.createQueryBuilder('product');
+
+    try{
+      return await query
+        .delete()
+        .where({})
+        .execute();
+        
+    }catch(error){
+      this.handleExceptions(error);
+    }
 
   }
 }
