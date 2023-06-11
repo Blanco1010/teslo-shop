@@ -4,6 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt  from 'bcrypt';
 import { User } from './entities/user.entity';
 import { LoginUserDto, CreateUserDto } from './dto';
+import { JwtService } from '@nestjs/jwt';
+import { JwtPayload } from './interfaces/jwt.strategy.interfaces';
 
 
 
@@ -13,7 +15,8 @@ export class AuthService {
 
   constructor(
     @InjectRepository(User)
-    private readonly userRepository: Repository<User>
+    private readonly userRepository: Repository<User>,
+    private readonly jwtService: JwtService
   ){
 
   }
@@ -45,7 +48,7 @@ export class AuthService {
 
       const user = await this.userRepository.findOne({
         where: {email},
-        select: {email:true, password: true}
+        select: {email:true, password: true, id: true}
       });
 
       if(!user)
@@ -57,7 +60,17 @@ export class AuthService {
 
 
 
-      return user;
+      return {
+        ...user,
+        token: this.getJwtToken({id: user.id})
+      };
+  }
+
+
+  private getJwtToken(payload: JwtPayload){
+
+    const token = this.jwtService.sign(payload);
+    return token;
   }
 
   private hendleDBErrors(error: any){
